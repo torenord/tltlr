@@ -1,0 +1,293 @@
+--------------------------------------------------------------------------------
+---
+--- Find gcd duration
+--- =====================================
+---
+--- !!! State space must be finite !!!
+---
+--- ----------------------------------------------------
+---  State space search for the gcd of tick durations
+--- ----------------------------------------------------
+---  (find gcd of tick durations from <initState> .)
+--- ----------------------------------------------------
+---
+--- Model check using user specified tick duration
+--- ==============================================
+---
+--- !!! In continuous semantics, phi must not contain action predicates !!!
+---
+--- --------------------------------------------------------------------
+---              User specified tick duration
+--- --------------------------------------------------------------------
+---  Pointwise   (mc-tltlr <initState> |=p <phi> using tick duration <tickDuration> .)
+--- --------------------------------------------------------------------
+---  Continuous  (mc-tltlr <initState> |=c <phi> using tick duration <tickDuration> .)
+--- --------------------------------------------------------------------
+---
+--------------------------------------------------------------------------------
+
+--- The user imports this module to define predicates and formulas.
+fmod TLTLR-MODEL-CHECKER is
+    including LTLR-MODEL-CHECKER .
+    including TIMED-PRELUDE .
+
+    *** Intervals ******************************************
+
+    sort Interval .
+    op [_, _] : Time Time -> Interval [ctor format (r o d s r o)] .
+
+    *** Formulas *******************************************
+
+    op <>__ : Interval Formula -> Formula         [prec 53 format (r o d d)] .
+    op []__ : Interval Formula -> Formula         [prec 53 format (r d o d d)] .
+    op _U__ : Formula Interval Formula -> Formula [prec 63 format (d r o d d)] .
+    op _R__ : Formula Interval Formula -> Formula [prec 63 format (d r o d d)] .
+
+    ********************************************************
+
+    --- We declare this subsort here because we need it and it does
+    --- not make sense for the user to do anything else.
+    subsort ClockedSystem < State .
+
+    --- TODO: This should be moved to one of the internal modules.
+    --- The frozen attribute is necessary to make sure only the __tltlr_tick rule is applied.
+    op _becomes_in`time_ : GlobalSystem GlobalSystem Time -> ClockedSystem [format (o g g g g y o) frozen] .
+endfm
+
+--- Internals that are imported automatically by module transformation
+--- at the meta-level.
+mod TLTLR-PRELUDE is
+    including TLTLR-MODEL-CHECKER .
+
+    *** The global tick duration ***************************
+
+    op TLTLR-TICK-DURATION : -> NzTime .
+
+    *** Tick predicate *************************************
+
+    --- Assumes the user does not define constant `tick` of same sort
+    --- and does not have any rules with label `__tltlr_tick`. The
+    --- user should not use this predicate directly nor define own
+    --- predicates using label `__tltlr_tick`.
+
+    var CTX : StateContext .
+    var QID : Qid .
+    var SUB : StateSubstitution .
+    op tick : -> Action [ctor] .
+    eq  { CTX | QID : SUB } |= tick = QID == '__tltlr_tick .
+
+    *** Formula transformations ****************************
+
+    var  p       : Prop .
+    var  delta   : Action .
+    vars phi psi : Formula .
+    var  i       : Interval .
+    vars a b     : Time .
+
+    --- Pointwise semantics --------------------------------
+
+    op FTp : Formula -> Formula .
+
+    eq  FTp(True)             = True .
+    eq  FTp(False)            = False .
+    eq  FTp(p)                = p .
+    eq  FTp(delta)            = delta .
+    eq  FTp(~ phi)            = ~ FTp(phi) .
+    eq  FTp(phi /\ psi)       = FTp(phi) /\ FTp(psi) .
+    eq  FTp(phi \/ psi)       = FTp(phi) \/ FTp(psi) .
+    eq  FTp(O phi)            = O (tick U FTp(phi)) .
+    eq  FTp(<> phi)           = <> (~ tick /\ FTp(phi)) .
+    eq  FTp([] phi)           = [] (tick \/ FTp(phi)) .
+    eq  FTp(phi U psi)        = (tick \/ FTp(phi)) U (~ tick /\ FTp(psi)) .
+    eq  FTp(phi R psi)        = ~ FTp(~ phi U ~ psi) .
+    eq  FTp(<> i phi)         = FTp(True U i phi) .
+    eq  FTp([] i phi)         = FTp(~ (<> i ~ phi)) .
+    ceq FTp(phi U [a, b] psi) = (~ tick /\ FTp(phi)) U (~ tick /\ FTp(psi))                                                                     if a == zero and b == zero .
+    ceq FTp(phi U [a, b] psi) = (~ tick /\ FTp(phi)) U ((~ tick /\ FTp(psi)) \/ (tick /\ O FTp(phi U [zero, b monus TLTLR-TICK-DURATION] psi))) if a == zero and b gt zero .
+    ceq FTp(phi U [a, b] psi) = (~ tick /\ FTp(phi)) U (tick /\ O FTp(phi U [a monus TLTLR-TICK-DURATION, b monus TLTLR-TICK-DURATION] psi))    if a gt zero and b gt zero .
+    eq  FTp(phi R i psi)      = ~ FTp(~ phi U i ~ psi) .
+
+    --- Continuous semantics -------------------------------
+
+    op FTc : Formula -> Formula .
+
+    eq  FTc(True)             = True .
+    eq  FTc(False)            = False .
+    eq  FTc(p)                = p .
+    eq  FTc(delta)            = delta .
+    eq  FTc(~ phi)            = ~ FTc(phi) .
+    eq  FTc(phi /\ psi)       = FTc(phi) /\ FTc(psi) .
+    eq  FTc(phi \/ psi)       = FTc(phi) \/ FTc(psi) .
+    eq  FTc(O phi)            = O (tick U FTc(phi)) .
+    eq  FTc(<> phi)           = <> FTc(phi) .
+    eq  FTc([] phi)           = [] FTc(phi) .
+    eq  FTc(phi U psi)        = FTc(phi) U FTc(psi) .
+    eq  FTc(phi R psi)        = FTc(phi) R FTc(psi) .
+    eq  FTc(<> i phi)         = FTc(True U i phi) .
+    eq  FTc([] i phi)         = FTc(~ (<> i ~ phi)) .
+    ceq FTc(phi U [a, b] psi) = (~ tick /\ FTc(phi)) U FTc(psi)                                                                              if a == zero and b == zero .
+    ceq FTc(phi U [a, b] psi) = (~ tick /\ FTc(phi)) U (FTc(psi) \/ (tick /\ O FTc(phi U [zero, b monus TLTLR-TICK-DURATION] psi)))          if a == zero and b gt zero .
+    ceq FTc(phi U [a, b] psi) = (~ tick /\ FTc(phi)) U (tick /\ O FTc(phi U [a monus TLTLR-TICK-DURATION, b monus TLTLR-TICK-DURATION] psi)) if a gt zero and b gt zero .
+    eq  FTc(phi R i psi)      = ~ FTc(~ phi U i ~ psi) .
+
+    *** Module transformations *************
+
+    var T : Time .
+    vars GS GS' : GlobalSystem .
+
+    --- _becomes_in time_ ----------------------------------
+
+    rl [__tltlr_tick] : GS becomes GS' in time T => GS becomes GS' in time (T monus TLTLR-TICK-DURATION) .
+
+    --- This formula needs to be a conditional equation. "eq GS
+    --- becomes GS' in time zero = GS' ." does not work because zero
+    --- is rewritten to 0.Nat and does not match left hand side.
+    ceq GS becomes GS' in time T = GS' if T == zero .
+
+    eq GS becomes GS' in time NZT:NzTime |= P:Prop = GS |= P:Prop .
+
+    --- _in time_ ----------------------------------
+
+    rl [__tltlr_tick] : GS in time T => GS in time (T monus TLTLR-TICK-DURATION) .
+
+    ceq GS in time T = GS if T == zero .
+endm
+
+fmod TLTLR-META-MODEL-CHECKER is
+    including TIMED-META-REWRITE . --- TODO: Check if these are the best imports
+    including TERM-SET .
+    including UNIT .
+    including META-LEVEL .
+
+    --- TODO: Clean up unused
+    var M : Module .
+    vars T T' T'' : Term .
+    var F : Qid .
+    vars RLS RLS' : RuleSet .
+    var RULE : Rule .
+    vars COND COND' : Condition .
+    var AS : AttrSet .
+    vars TL TL' : TermList .
+    vars V VAR VAR' : Variable .
+    var C : Constant .
+    var TM : TickMode .
+
+    *** Pointwise
+    op metaTLTLRp : Module Term Term Term TickMode ~> ResultPair .
+    eq metaTLTLRp(M, T, T', T'', TM) = metaReduce(
+          modulePTransformations(noZeroTick(applyTSS(M, TM)), T''),
+          'modelCheck[T, 'FTp[T']]
+    ) .
+
+    *** Continuous
+    op metaTLTLRc : Module Term Term Term TickMode ~> ResultPair .
+    eq metaTLTLRc(M, T, T', T'', TM) = metaReduce(
+          moduleCTransformations(noZeroTick(applyTSS(M, TM)), T''),
+          'modelCheck[T, 'FTc[T']]
+    ) .
+
+    op modulePTransformations : Module Term -> Module .
+    eq modulePTransformations(M, T) = tickConstantEq(makeInTimeOpFrozen(addDecls(M, upModule('TLTLR-PRELUDE, true))), T) .
+
+    op moduleCTransformations : Module Term -> Module .
+    eq moduleCTransformations(M, T) = tickConstantEq(becomingTransformations(addDecls(M, upModule('TLTLR-PRELUDE, true))), T) .
+
+    op tickConstantEq : Module Term -> Module .
+    eq tickConstantEq(M, T) = addEqs(tickConstantEq(T), M) .
+    op tickConstantEq : Term -> Equation .
+    eq tickConstantEq(T) = (eq 'TLTLR-TICK-DURATION.Time = T [none] .) .
+
+    op becomingTransformations : Module -> Module .
+    eq becomingTransformations(M) = setRls(M, transRls(getRls(M))) .
+
+    *** Transform rules ************************************
+
+    op transRls : RuleSet -> RuleSet .
+
+    ceq transRls(RLS RLS') =
+        transRls(RLS) transRls(RLS')
+      if RLS =/= none /\ RLS' =/= none .
+    eq transRls(none) = none .
+
+    eq transRls((rl '`{_`}[T] => '_in`time_[T', T''] [AS] .))
+      = (rl '`{_`}[T] => '_becomes_in`time_['`{_`}[T], T', T''] [AS] .) .
+
+    eq transRls((crl '`{_`}[T] => '_in`time_[T', T''] if COND [AS] .))
+        = (crl '`{_`}[T] => '_becomes_in`time_['`{_`}[T], T', T''] if COND [AS] .) .
+
+    ceq transRls(RULE) = RULE if not tickRule(RULE) .
+
+    *** From Real-Time Maude *******************************
+
+    op tickRule : Rule -> Bool .
+
+    ops globalSystemTerm inTimeTerm : Term -> Bool .
+    --- Is the term a term of sort GlobalSystem or of the form T in time T'??
+
+    eq inTimeTerm(F[TL]) = F == '_in`time_ .
+    *** Because strictly speaking, T could be a variable of sort GlobalSystem,
+    *** so no need to check whether it is a term of sort GlobalSystem.
+    eq inTimeTerm(V) = false .   *** Note, does not recognize a variable ...
+    eq inTimeTerm(C) = false .   *** ... or constant od sort ClockedSystem!!!
+
+    eq globalSystemTerm(F[TL]) = F == '`{_`} .
+    eq globalSystemTerm(C) = getType(C) == 'GlobalSystem .
+    eq globalSystemTerm(V) = getType(V) == 'GlobalSystem .
+
+    eq tickRule(rl T => T' [AS] .) = globalSystemTerm(T) and inTimeTerm(T') .
+    eq tickRule(crl T => T' if COND [AS] .) = tickRule(rl T => T' [AS] .) .
+
+    var TY : Type .
+    var N : Nat .
+    var SUB : Substitution .
+    var TS : Termset .
+    var MOD : Module .
+
+    *** Gcd state space search *****************************
+
+    --- Return gcd of all tick durations in found in a search in
+    --- module M starting from term T using tick mode TM.
+    op findGcdDuration : Module Term TickMode -> Term .
+    eq findGcdDuration(M, T, TM) = calculateGcd(M, searchForTickDurations(gcdSearchTransformation(M, TM), T)) .
+
+    --- To find tick durations, we make the _in time_ op frozen and
+    --- add a rule that removes _in time_. By assumption there is no
+    --- other rule with _in time_ on the left hand side, so _in time_
+    --- will immediately be removed. That allows us to find the
+    --- duration of every tick rule encountered.
+    op gcdSearchTransformation : Module TickMode -> Module .
+    eq gcdSearchTransformation(M, TM) = removeInTime(makeInTimeOpFrozen(noZeroTick(applyTSS(M, TM)))) .
+
+    --- We do a metaSearch in transformed module from T and collect
+    --- tick durations.
+    op searchForTickDurations : Module Term -> Termset .
+    eq searchForTickDurations(M, T) = searchForTickDurations(M, T, 0) .
+
+    op searchForTickDurations : Module Term Nat -> Termset .
+    ceq searchForTickDurations(M, T, N) = T'' || searchForTickDurations(M, T, s(N)) if {T', TY, 'R:Time <- T'' ; SUB} := metaSearch(M, T, '_in`time_['GS:GlobalSystem,'R:Time], nil, '*, unbounded, N) .
+    eq searchForTickDurations(M, T, N) = noterm [owise] .
+
+    --- We assume that the time domain has a function `gcd : Time Time
+    --- -> Time`. calculateGcd finds the gcd of all the tick durations
+    --- found in the search.
+    op calculateGcd : Module Termset -> Term .
+    eq calculateGcd(M, noterm) = 'zero.Time .
+    eq calculateGcd(M, T) = T .
+    eq calculateGcd(M, T || T' || TS) = calculateGcd(M, getTerm(metaReduce(M, 'gcd[T, T'])) || TS) .
+
+    vars TyL TyL' : TypeList .
+    vars Ty Tp : Type .
+    var  AtS : AttrSet .
+    var OPDS : OpDeclSet .
+
+    op makeInTimeOpFrozen : Module -> Module .
+    eq makeInTimeOpFrozen(M) = setOps(M, makeInTimeOpFrozen(getOps(M))) .
+    op makeInTimeOpFrozen : OpDeclSet -> OpDeclSet .
+    eq makeInTimeOpFrozen((op '_in`time_ : TyL -> Ty [AtS] .) OPDS) = (op '_in`time_ : TyL -> Ty [AtS frozen(1 2)] .) OPDS .
+
+    op removeInTime : Module -> Module .
+    eq removeInTime(M) = addRls(removeInTime, M) .
+    op removeInTime : -> Rule .
+    eq removeInTime = (rl '_in`time_['GS:GlobalSystem,'R:Time] => 'GS:GlobalSystem [none] .) .
+
+endfm

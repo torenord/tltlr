@@ -1,0 +1,159 @@
+--- real-time-maude.maude	2019-02-04 18:51:59.321425331 +0100
++++ rtm-tltlr.maude	2019-02-04 19:13:50.548069521 +0100
+@@ -1,3 +1,19 @@
++*** TLTLR **********************************************************************
++***                                                                          ***
++*** This has been changed from Real-Time Maude to do essentially three       ***
++*** things:                                                                  ***
++***                                                                          ***
++***   1. Load the LTLR model checker instead of the standard built in        ***
++***      LTL model checker. This is needed to be able to use spatial         ***
++***      action patterns in formulas, for instance.                          ***
++***   2. Support has been added for TLTLR model checking commands.           ***
++***   3. Load the Maude file `tltlr.maude` that contains the code that       ***
++***      does the actual work of model checking TLTLR.                       ***
++***                                                                          ***
++*** All changes from Real-Time Maude have been marked.                       ***
++***                                                                          ***
++*** /TLTLR *********************************************************************
++
+ --- Slightly updated February 4, 2010:
+ --- 1. A small but potentially significant bug 
+ ---    when doing timed commands with '>=' time limits.
+@@ -271,7 +287,7 @@
+ ----     cmb (A, B) S : PFun(X, Y) if not(A in dom(S)) /\ S : PFun`(X`,Y`) .
+ ----
+ 
+-load model-checker.maude
++load ltlr-checker.maude         --- TLTLR
+ 
+ -------------------------------------------------------------------------------
+ *******************************************************************************
+@@ -13540,6 +13556,10 @@
+ 
+   op get tick mode . : -> @Command@ .           *** Print tick mode
+   op show tick mode . : -> @Command@ .          *** Same as above
++
++  op find gcd of tick durations from_.  : @Bubble@                   -> @Command@ . --- TLTLR
++  op mc-tltlr_|=p_using tick duration_. : @Bubble@ @Bubble@ @Bubble@ -> @Command@ . --- TLTLR
++  op mc-tltlr_|=c_using tick duration_. : @Bubble@ @Bubble@ @Bubble@ -> @Command@ . --- TLTLR
+ endfm
+ 
+ 
+@@ -15992,6 +16012,7 @@
+ 
+ 
+ 
++load tltlr                      --- TLTLR
+ 
+ 
+ 
+@@ -16155,7 +16176,8 @@
+                                    database(evalModExp(ME, DB)), Q, T, TiM)
+           fi)
+       if (Q == 'trew_with`no`time`limit`.) or 
+-         (Q == 'tfrew_with`no`time`limit`.).
++         (Q == 'tfrew_with`no`time`limit`.) or
++         (Q == 'find`gcd`of`tick`durations`from_.) . --- TLTLR
+ 
+   op preprocessTimedCommandT : ModuleExpression Module Bound OpDeclSet Database
+                                Qid Term TickMode -> QidList .
+@@ -16632,7 +16654,9 @@
+                                    Q, T, T', T'', TiM)
+           fi)
+       if (Q == 'check_|=_until_with`no`time`limit`.) or
+-         (Q == 'check_|=_untilStable_with`no`time`limit`.) .
++         (Q == 'check_|=_untilStable_with`no`time`limit`.) or
++         (Q == 'mc-tltlr_|=p_using`tick`duration_.) or --- TLTLR
++         (Q == 'mc-tltlr_|=c_using`tick`duration_.) .  --- TLTLR
+ 
+   op preprocessTimedCommandTPP : ModuleExpression Module Bound OpDeclSet 
+                                  Database Qid Term Term Term TickMode 
+@@ -17406,6 +17430,56 @@
+ 
+ 
+ 
++  --- TLTLR
++  protecting TLTLR-META-MODEL-CHECKER .
++
++  eq procParsedTimedCommandT('find`gcd`of`tick`durations`from_., MOD, TERM, BOUND, SOLVEDTICKMODE) =
++        ('\n '\c 'Found 'gcd 'duration 'from
++          '\o '\s
++          eMetaPrettyPrint(MOD, TERM) '\c  'in  '\o
++          eMetaPrettyPrint(getName(MOD)) '\c 'with 'mode 
++          printMode(SOLVEDTICKMODE, MOD) '\n
++          '\c '\n 'Result '\o '\c ': '\n '\o '\s '\s
++          eMetaPrettyPrint(MOD, findGcdDuration(MOD, TERM, SOLVEDTICKMODE))
++          '\n) .
++
++  ceq procParsedTimedCommandTPP('mc-tltlr_|=p_using`tick`duration_., MOD,
++                                TERM, BOUND, T, COND, 
++                                T', COND',  SOLVEDTICKMODE) =
++        if RP :: ResultPair then
++         ('\n '\c 'TLTLR 'model 'check 'pointwise '\s '\o
++                  eMetaPrettyPrint(MOD, TERM)
++           '\c '\s '|= '\o '\s eMetaPrettyPrint(MOD, T)
++           '\c  '\s 'in '\o
++         eMetaPrettyPrint(getName(MOD)) '\c 'with 'mode
++            printMode(SOLVEDTICKMODE, MOD) '\c '\n
++           '\c '\n 'Result '\o
++           eMetaPrettyPrint(getType(RP)) '\c ': '\n '\o '\s '\s
++           eMetaPrettyPrint(MOD, getTerm(RP)) '\n '\o )
++        else ('\n '\r 'Untimed 'model 'checking: 'Something 'went
++                      'wrong! '\o '\n)
++        fi
++      if RP := metaTLTLRp(MOD,  TERM, T, T', SOLVEDTICKMODE) .
++
++  ceq procParsedTimedCommandTPP('mc-tltlr_|=c_using`tick`duration_., MOD,
++                                TERM, BOUND, T, COND, 
++                                T', COND',  SOLVEDTICKMODE) =
++        if RP :: ResultPair then
++         ('\n '\c 'TLTLR 'model 'check 'continuous '\s '\o
++                  eMetaPrettyPrint(MOD, TERM)
++           '\c '\s '|= '\o '\s eMetaPrettyPrint(MOD, T)
++           '\c  '\s 'in '\o
++         eMetaPrettyPrint(getName(MOD)) '\c 'with 'mode
++            printMode(SOLVEDTICKMODE, MOD) '\c '\n
++           '\c '\n 'Result '\o
++           eMetaPrettyPrint(getType(RP)) '\c ': '\n '\o '\s '\s
++           eMetaPrettyPrint(MOD, getTerm(RP)) '\n '\o )
++        else ('\n '\r 'Untimed 'model 'checking: 'Something 'went
++                      'wrong! '\o '\n)
++        fi
++      if RP := metaTLTLRc(MOD,  TERM, T, T', SOLVEDTICKMODE) .
++  --- /TLTLR
++
+   ceq procParsedTimedCommandTP('mc_|=u_., MOD, TERM, BOUND, 
+                                T, COND, SOLVEDTICKMODE) =
+        ('\n '\r 'Error: 'No 'condition 'in 
+@@ -18375,7 +18449,10 @@
+         F == 'mc_|=u_. or
+         F == 'mc_|=t_with`no`time`limit`. or
+         F == 'mc_|=t_in`time`<_.  or
+-        F == 'mc_|=t_in`time`<=_.  .
++        F == 'mc_|=t_in`time`<=_. or
++        F == 'find`gcd`of`tick`durations`from_.  or --- TLTLR
++        F == 'mc-tltlr_|=p_using`tick`duration_. or --- TLTLR
++        F == 'mc-tltlr_|=c_using`tick`duration_. .  --- TLTLR
+ 
+ 
+   *** Setting of tick modes:
+@@ -18559,6 +18636,9 @@
+         F == 'mc_|=t_with`no`time`limit`. or
+         F == 'mc_|=t_in`time`<_.  or
+         F == 'mc_|=t_in`time`<=_.  or
++        F == 'find`gcd`of`tick`durations`from_.  or --- TLTLR
++        F == 'mc-tltlr_|=p_using`tick`duration_. or --- TLTLR
++        F == 'mc-tltlr_|=c_using`tick`duration_. or --- TLTLR
+         F == 'set`tick`max`def_.   or  
+         F == 'set`tick`def_. .
+ 
+@@ -18637,7 +18717,7 @@
+             default : 'CONVERSION >,
+          ('\n '\t '\s '\s '\s '\s '\s string2qidList(banner) '\n
+          '\n '\t    '\s '\s  '\! '\m  'Real-Time 'Maude '2.3 '\o '\c
+-             'extension 'February '4 '`, '\s '2010 '\o '\n)] .
++             'TLTLR 'Model 'Checker 'extension 'February '4 '`, '\s '2019 '\o '\n)] . --- TLTLR
+ 
+ 
+   crl [in] :
