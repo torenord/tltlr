@@ -1,0 +1,45 @@
+
+load ../../rtm-tltlr
+
+(tmod TEST is
+    including NAT-TIME-DOMAIN-WITH-INF .
+
+    sort TestState .
+    subsort TestState < System .
+
+    ops a b c d : Nat -> TestState .
+
+    var N : Nat .
+
+    crl [l1] : {a(N)} => {b(N + R:Time)} in time R:Time if R:Time <= 8 [nonexec] .
+    rl  [l2] :  b(N)  =>  c(N) .
+    crl [l3] : {c(N)} => {d(N + R:Time)} in time R:Time if R:Time <= 12 [nonexec] .
+    rl  [l4] :  d(N)  =>  d(N) .
+endtm)
+
+(tmod TEST-CHECK is
+    including TEST .
+    including TLTLR-MODEL-CHECKER .
+
+    vars GS GS' : GlobalSystem .
+
+    op state : State -> Prop [ctor] .
+    eq GS |= state(GS') = GS == GS' .
+
+    vars QID1 QID2 : Qid .
+    op action : Qid -> Action [ctor] .
+    eq { CTX:StateContext | QID1 : SUB:StateSubstitution } |= action(QID2) = QID1 == QID2 .
+
+    op phi : -> Formula .
+    eq phi = [] [1, 2] (state({a(0)}) \/ state({b(1)}) \/ state({c(1)}) \/ state({d(2)})) .
+endtm)
+
+(set tick max def 1 .)
+
+(mc-tltlr {a(0)} |=p [] [1, 2] state({a(42)}) using tick duration 1 .)
+
+(find gcd of tick durations from {a(0)} .)
+
+(mc-tltlr {a(0)} |=c [] [1, 2] state({a(42)}) using tick duration 4 .)
+
+q

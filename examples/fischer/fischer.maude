@@ -1,0 +1,83 @@
+
+*** Todo:
+
+*** - Rewrite for TLTLR
+*** - Add time on every instruction
+*** - Write some properties to verify mutual exclusion and starvation freedom
+*** - Will need fairness to get this to work
+
+fmod PROCESS is
+    including NAT .
+
+    sort Process .
+
+    sort State .
+    ops idle waiting until critical empty-register : -> State .
+    op delayed : Nat -> State .
+
+    op process : Nat State -> Process [ctor] .
+endfm
+
+fmod REGISTER is
+    including NAT .
+
+    sort Register .
+
+    op register : Nat -> Register [ctor] .
+endfm
+
+mod FISCHER is
+    including PROCESS .
+    including REGISTER .
+
+    including CONFIGURATION .
+
+    subsort Process < Configuration .
+    subsort Register < Configuration .
+
+    vars N I : Nat .
+    vars S T : State .
+
+    *** a process can go from idle to waiting for the register to be
+    *** empty at any time
+    rl [acquire_mutex] : process(I, idle) => process(I, waiting) .
+
+    *** Read register again and again until it is 0
+    rl [read-register] :
+        process(I, waiting) register(N)
+      =>
+      if N == 0 then
+          process(I, empty-register) register(N)
+        else
+          process(I, waiting) register(N)
+        fi .
+
+    rl [set-register] :
+        process(I, empty-register) register(N)
+      =>
+        process(I, delayed(50)) register(I) .
+
+    *** cheat tick rule
+    rl process(I, delayed(50)) => process(I, delayed(0)) .
+
+    eq delayed(0) = until .
+
+    rl process(I, until) register(N) =>
+      if N == I then
+          process(I, critical) register(N)
+        else
+          process(I, waiting) register(N)
+        fi .
+
+
+    rl [release-mutex] : process(I, critical) register(N) => process(I, idle) register(0) .
+
+    op example : -> Configuration .
+
+    eq example = register(0) process(1, idle) process(2, idle) .
+    
+endm
+
+search example =>* C:Configuration process(1, critical) process(2, critical) .
+
+q
