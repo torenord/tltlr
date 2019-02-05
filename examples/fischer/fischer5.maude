@@ -1,0 +1,3 @@
+
+
+-- We need some way of modelling contention of memory, many concurrent reads should be queued

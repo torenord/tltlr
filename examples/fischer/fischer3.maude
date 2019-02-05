@@ -1,0 +1,109 @@
+load ../../rtm-tltlr
+
+(fmod PROCESS is
+    including NAT .
+
+    sort Process .
+
+    op process : Nat State -> Process [ctor] .
+
+    sort State .
+    op idle : -> State .
+    op acquire-pc : Nat -> State .
+    op critical : -> State .
+    op release-pc : Nat -> State .
+endfm)
+
+(fmod REGISTER is
+    including NAT .
+
+    sort Register .
+
+    op register : Nat -> Register [ctor] .
+endfm)
+
+(tmod FISCHER is
+    including PROCESS .
+    including REGISTER .
+
+    including CONFIGURATION .
+
+    subsort Process < Configuration .
+    subsort Register < Configuration .
+
+    including NAT-TIME-DOMAIN-WITH-INF .
+    subsort Configuration < System .
+    
+    vars N I : Nat .
+    vars S T : State .
+
+    rl [acquire_mutex] :
+        process(I, idle)
+      =>
+        process(I, acquire-pc(1)) .
+
+    *** in time DELTA
+    rl [read-register] :
+        process(I, acquire-pc(1)) register(N)
+      =>
+      if N == 0 then process(I, acquire-pc(2)) register(N) else process(I, acquire-pc(1)) register(N) fi .
+
+    *** in time DELTA
+    rl [write-register] :
+        process(I, acquire-pc(2)) register(N)
+      =>
+        process(I, acquire-pc(3)) register(I) .
+
+    *** in time DELTA
+    rl [delay-delta] :
+        {process(I, acquire-pc(3)) C:Configuration}
+      =>
+        {process(I, acquire-pc(4)) C:Configuration} in time 8 .
+
+    *** in time DELTA
+    rl [read-register2] :
+        process(I, acquire-pc(4)) register(N) =>
+      if N == I then
+          process(I, critical) register(N)
+        else
+          process(I, acquire-pc(1)) register(N)
+        fi .
+
+    *** rl [release_mutex] :
+    ***     process(I, critical)
+    ***   =>
+    ***     process(I, release-pc(1)) .
+
+    *** rl [write-register2] :
+    ***     process(I, release-pc(1)) register(I)
+    ***   =>
+    ***     process(I, idle) register(0) .
+
+endtm)
+
+(mod TESTS is
+    including FISCHER .
+    including TLTLR-MODEL-CHECKER .
+
+    vars GS GS' : GlobalSystem .
+
+    op state : State -> Prop [ctor] .
+    eq GS |= state(GS') = GS == GS' .
+
+    vars QID1 QID2 : Qid .
+    op action : Qid -> Action [ctor] .
+    eq { CTX:StateContext | QID1 : SUB:StateSubstitution } |= action(QID2) = QID1 == QID2 .
+
+    op c1 : -> System .
+    op c2 : -> System .
+    
+    eq c1 = process(1, idle) register(0) .
+    eq c2 = process(1, idle) process(2, idle) register(0) .
+
+endm)
+
+(set tick max def 1 .)
+
+(trew {process(1, acquire-pc(1)) register(0)} in time < 50 .)
+
+q

@@ -1,0 +1,52 @@
+
+fmod MESSAGE is
+    including NAT .
+    including QID .
+
+    sort Message .
+
+    op msg_from_to_ : Content Qid Qid -> Message [ctor] .
+
+    sort Content .
+    op read : -> Content [ctor] .
+    op write : Nat -> Content [ctor] .
+    op resp : Nat -> Content [ctor] .
+endfm
+
+fmod TIME is
+    including NAT .
+
+    sort Time .
+    subsort Time < Nat .
+endfm
+
+mod REGISTER is
+    including NAT .
+    including QID .
+    including MESSAGE .
+    including TIME .
+
+    sort Register .
+
+    op register : Qid Nat MessageList Time -> Register [ctor] .
+
+    sort MessageList .
+    subsort Message < MessageList .
+    op nil : -> MessageList [ctor] .
+    op _::_ : MessageList MessageList -> MessageList [ctor] .
+
+    op delta : Register Time -> Register [frozen (1)] .
+    eq delta(register(QID:Qid, N:Nat, ML:MessageList, T:Time), T':Time) = register(QID:Qid, N:Nat, ML:MessageList, T:Time + T':Time) .
+
+endm
+
+
+
+red register('X, 0, (msg read from 'A to 'X) :: (msg read from 'B to 'X), 50) .
+
+
+
+
+    
+    
+q
