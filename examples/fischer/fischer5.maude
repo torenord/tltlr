@@ -1,3 +1,158 @@
 
+load ../../rtm-tltlr.maude
 
--- We need some way of modelling contention of memory, many concurrent reads should be queued
+(tomod FISCHER is
+    including NAT-TIME-DOMAIN-WITH-INF .
+    
+    subsort Configuration < System .
+
+    sort State .
+    op idle : -> State [ctor] .
+    op acquire-mutex : Nat -> State [ctor] .
+    op critical : -> State [ctor] .
+    op release-mutex : Nat -> State [ctor] .
+
+    class Process | state : State, delay : Time .
+    class Register | value : Oid, buffer : MsgList, delay : Time .
+
+    vars P P' P'' : Oid .
+    vars V V' V'' : Oid .
+
+    op P1 : -> Oid .
+    op P2 : -> Oid .
+    op X : -> Oid .
+    op BOT : -> Oid .
+
+    sort MsgList .
+    op nil : -> MsgList [ctor] .
+    op _::_ : MsgList MsgList -> MsgList [ctor assoc id: nil] .
+    subsort Msg < MsgList .
+
+    vars BUF : MsgList .
+    
+    sort MsgContent .
+    op read : -> MsgContent [ctor] .
+    op readResponse : Oid -> MsgContent [ctor] .
+    op write : Oid -> MsgContent [ctor] .
+    op writeResponse : -> MsgContent [ctor] .
+
+    op _<-_ : Oid MsgContent -> Msg [ctor] .
+
+
+    rl [acquire-mutex] :
+        < P : Process | state : idle >
+      =>
+        < P : Process | state : acquire-mutex(1) > .
+
+    rl [read-register] :
+        < P : Process | state : acquire-mutex(1) >
+        < X : Register | buffer : BUF >
+      =>
+        < P : Process | state : acquire-mutex(2) >
+        < X : Register | buffer : BUF :: (P <- read) > .
+
+    *** REGISTER ********************************************
+
+    rl [register-read-respond] :
+        < X : Register | value : P', buffer : (P <- read) :: BUF, delay : 0 >
+      =>
+        < X : Register | value : P', buffer : BUF, delay : 50 >
+        (P <- readResponse(P')) .
+
+    rl [register-write-respond] :
+        < X : Register | value : P, buffer : (P' <- write(P'')) :: BUF, delay : 0 >
+      =>
+        < X : Register | value : P'', buffer : BUF, delay : 50 >
+        (P' <- writeResponse) .
+
+    *** /REGISTER *******************************************
+
+    rl [read-register-response] :
+        < P : Process | state : acquire-mutex(2) >
+       (P <- readResponse(V)) < X : Register | buffer : BUF >
+      =>
+      if V == BOT then
+          < P : Process | state : acquire-mutex(3) >
+          < X : Register | buffer : BUF :: (P <- write(P)) >
+        else
+          < P : Process | state : acquire-mutex(1) > < X : Register | >
+        fi .
+    
+    rl [read-register-response] :
+        < P : Process | state : acquire-mutex(3) >
+       (P <- writeResponse)
+      =>
+        < P : Process | state : acquire-mutex(4), delay : 50 > .
+    
+    rl [read-wait-for-delay] :
+        < P : Process | state : acquire-mutex(4), delay : 0 >
+      =>
+        < P : Process | state : acquire-mutex(5) > .
+    
+    rl [read-register-again] :
+        < P : Process | delay : 0, state : acquire-mutex(5) > < X : Register | buffer : nil, value : P' >
+      =>
+        < P : Process | state : acquire-mutex(6) > < X : Register | buffer : (P <- read) > .
+    
+    rl [read-register-again-response] :
+        < P : Process | delay : 0, state : acquire-mutex(6) > (P <- readResponse(P'))
+      =>
+      if P == P' then
+          < P : Process | delay : 0, state : critical >
+        else
+          < P : Process | delay : 0, state : acquire-mutex(1) >
+      fi .
+    
+    rl [release-mutex] :
+        < P : Process | state : critical >
+      =>
+        < P : Process | state : release-mutex(1) > .
+    
+
+    rl [release-write-register] :
+        < P : Process | state : release-mutex(1) > < X : Register | buffer : BUF, value : P' >
+      =>
+        < P : Process | state : release-mutex(2) > < X : Register | buffer : BUF :: (P <- write(BOT)) > .
+
+    rl [release-write-register] :
+        < P : Process | state : release-mutex(2) > (P <- writeResponse)
+      =>
+        < P : Process | state : idle > .
+
+    vars R R' : Time .
+
+    crl [tick] : {C:Configuration} => {delta(C:Configuration, R)} in time R if R <= mte(C:Configuration) [nonexec] .
+
+    op delta : Configuration Time -> Configuration [frozen (1)] .
+    eq delta(none, R) = none .
+    eq delta(NeC:NEConfiguration NeC':NEConfiguration, R) = delta(NeC:NEConfiguration, R) delta(NeC':NEConfiguration, R) .
+    eq delta(< P : Process | delay : R >, R') = < P : Process | delay : R monus R' > .
+    eq delta(< X : Register | delay : R >, R') = < X : Register | delay : R monus R' > .
+    
+    op mte : Configuration -> TimeInf [frozen (1)] .
+    eq mte(none) = INF .
+    eq mte(NeC:NEConfiguration NeC':NEConfiguration) = min(mte(NeC:NEConfiguration), mte(NeC':NEConfiguration)) .
+    eq mte(< P : Process | delay : R >) = if R > 0 then R else INF fi .
+    eq mte(< X : Register | delay : R >) = if R > 0 then R else INF fi .
+
+    op initState : -> Configuration .
+    eq initState =
+        < P1 : Process | state : idle, delay : 0 >
+        < P2 : Process | state : idle, delay : 0 >
+        < X : Register | value : BOT, buffer : nil, delay : 50 > .
+
+    *** op initState2 : -> Configuration .
+    *** eq initState2 =
+    ***     < P1 : Process | delay : 0,state : acquire-mutex(3)> < X : Register | buffer : P1 <- write(P1),delay : 50,value : 0 > .
+    ***     < X : Register | buffer : ABUF, delay : 50, value : 0 > .
+
+endtom)
+
+
+*** (trew [1] {initState} with no time limit .)
+
+(set tick max def 1 .)
+
+(tfrew {initState} in time <= 2000 .)
+
+q
