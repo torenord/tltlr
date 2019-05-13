@@ -1,16 +1,16 @@
 *** TLTLR **********************************************************************
 ***                                                                          ***
-*** This has been changed from Real-Time Maude to do essentially three       ***
-*** things:                                                                  ***
+*** This is the Real-Time Maude Timed LTLR model checker. It changes         ***
+*** Real-Time Maude to do essentially three things:                          ***
 ***                                                                          ***
 ***   1. Load the LTLR model checker instead of the standard built in        ***
-***      LTL model checker. This is needed to be able to use spatial         ***
-***      action patterns in formulas, for instance.                          ***
-***   2. Support has been added for TLTLR model checking commands.           ***
-***   3. Load the Maude file `tltlr.maude` that contains the code that       ***
-***      does the actual work of model checking TLTLR.                       ***
+***      LTL model checker.                                                  ***
+***   2. Add support for TLTLR's model checking commands.                    ***
+***   3. Load the file `tltlr.maude` that contains the code that does        ***
+***      the actual work of the model checker.                               ***
 ***                                                                          ***
-*** All changes from Real-Time Maude have been marked.                       ***
+*** This file is based on Real-Time Maude version 2.3 and all changes have   ***
+*** been marked.                                                             ***
 ***                                                                          ***
 *** /TLTLR *********************************************************************
 
@@ -18717,7 +18717,7 @@ mod REAL-TIME-MAUDE is
             default : 'CONVERSION >,
          ('\n '\t '\s '\s '\s '\s '\s string2qidList(banner) '\n
          '\n '\t    '\s '\s  '\! '\m  'Real-Time 'Maude '2.3 '\o '\c
-             'TLTLR 'Model 'Checker 'extension 'February '4 '`, '\s '2019 '\o '\n)] . --- TLTLR
+             'TLTLR 'Model 'Checker 'extension 'May '\s '2019 '\o '\n)] . --- TLTLR
 
 
   crl [in] :

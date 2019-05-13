@@ -95,7 +95,6 @@ mod TLTLR-PRELUDE is
     eq  FTp(~ phi)            = ~ FTp(phi) .
     eq  FTp(phi /\ psi)       = FTp(phi) /\ FTp(psi) .
     eq  FTp(phi \/ psi)       = FTp(phi) \/ FTp(psi) .
-    eq  FTp(O phi)            = O (tick U FTp(phi)) .
     eq  FTp(<> phi)           = <> (~ tick /\ FTp(phi)) .
     eq  FTp([] phi)           = [] (tick \/ FTp(phi)) .
     eq  FTp(phi U psi)        = (tick \/ FTp(phi)) U (~ tick /\ FTp(psi)) .
@@ -118,7 +117,6 @@ mod TLTLR-PRELUDE is
     eq  FTc(~ phi)            = ~ FTc(phi) .
     eq  FTc(phi /\ psi)       = FTc(phi) /\ FTc(psi) .
     eq  FTc(phi \/ psi)       = FTc(phi) \/ FTc(psi) .
-    eq  FTc(O phi)            = O (tick U FTc(phi)) .
     eq  FTc(<> phi)           = <> FTc(phi) .
     eq  FTc([] phi)           = [] FTc(phi) .
     eq  FTc(phi U psi)        = FTc(phi) U FTc(psi) .

@@ -1,0 +1,13 @@
+   ~/ maude rtm-tltlr.maude
+                       \||||||||||||||||||/
+                     --- Welcome to Maude ---
+                       /||||||||||||||||||\
+              Maude 2.7 built: Feb  3 2019 16:24:12
+              Copyright 1997-2014 SRI International
+                     Mon May 13 21:33:48 2019
+
+               Full Maude 2.3 `(February 12th`, 2007`)
+
+            Real-Time Maude 2.3 TLTLR Model Checker extension May 2019
+
+  Maude>

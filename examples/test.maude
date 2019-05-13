@@ -1,0 +1,19 @@
+  load rtm-tltlr2
+
+  (tmod TEST is
+      including NAT-TIME-DOMAIN-WITH-INF .
+
+      sort TestState .
+      subsort TestState < System .
+
+      ops a b c d : Nat -> TestState .
+
+      var N : Nat .
+
+      crl [l1] : {a(N)} => {b(N + R:Time)} in time R:Time if R:Time <= 8 [nonexec] .
+      rl  [l2] :  b(N)  =>  c(N) .
+      crl [l3] : {c(N)} => {d(N + R:Time)} in time R:Time if R:Time <= 12 [nonexec] .
+      rl  [l4] :  d(N)  =>  d(N) .
+
+      including TLTLR-META-MODEL-CHECKER .
+  endtm)
