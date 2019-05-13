@@ -1,40 +1,14 @@
 load rtm-tltlr
 
-*** (tmod EXAMPLE is
-***     including NAT-TIME-DOMAIN-WITH-INF .
-
-***     sort ExampleState .
-***     subsort ExampleState < System .
-
-***     ops a b c d : -> ExampleState [ctor] .
-
-***     crl [l1] : {a} => {b} in time R:Time if R:Time <= 54 [nonexec] .
-***     rl  [l2] :  b  =>  c .
-***     crl [l3] : {c} => {d} in time R:Time if R:Time <= 24 [nonexec] .
-***     rl  [l4] :  d  =>  a .
-
-***     including TLTLR-META-MODEL-CHECKER .
-*** endtm)
-
-*** (tmod EXAMPLE-CHECK is
-***     including EXAMPLE .
-***     including TLTLR-MODEL-CHECKER .
-
-*** endtm)
-
-*** (set tick max def 1 .)
-
-*** (find gcd of tick durations from {a} .)
-
 (tmod TEST is
     including NAT-TIME-DOMAIN-WITH-INF .
 
     sort TestState .
     subsort TestState < System .
 
-    ops a b c d : Nat -> TestState .
+    ops a b c d : Time -> TestState .
 
-    var N : Nat .
+    var N : Time .
 
     crl [l1] : {a(N)} => {b(N + R:Time)} in time R:Time if R:Time <= 8 [nonexec] .
     rl  [l2] :  b(N)  =>  c(N) .
@@ -62,7 +36,9 @@ endtm)
 (set tick max def 1 .)
 
 (mc-tltlr {a(0)} |=p [] [1, 2] state({a(42)}) using tick duration 1 .)
+(mc-tltlr {a(0)} |=c [] [1, 2] state({a(42)}) using tick duration 1 .)
 
 (find gcd of tick durations from {a(0)} .)
 
+(mc-tltlr {a(0)} |=p [] [1, 2] state({a(42)}) using tick duration 4 .)
 (mc-tltlr {a(0)} |=c [] [1, 2] state({a(42)}) using tick duration 4 .)
