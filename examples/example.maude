@@ -8,10 +8,12 @@ load rtm-tltlr
 
     ops a b c d : -> ExampleState [ctor] .
 
-    crl [l1] : {a} => {b} in time R:Time if R:Time <= 3 [nonexec] .
+    crl [l1] : {a} => {b} in time R:Time if R:Time <= 54 [nonexec] .
     rl  [l2] :  b  =>  c .
-    crl [l3] : {c} => {d} in time R:Time if R:Time <= 5 [nonexec] .
+    crl [l3] : {c} => {d} in time R:Time if R:Time <= 24 [nonexec] .
     rl  [l4] :  d  =>  a .
 
     including TLTLR-META-MODEL-CHECKER .
 endtm)
+
+(find gcd of tick durations from {a} .)
