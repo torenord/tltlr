@@ -16,4 +16,6 @@ load rtm-tltlr
     including TLTLR-META-MODEL-CHECKER .
 endtm)
 
+(set tick max def 1 .)
+
 (find gcd of tick durations from {a} .)
