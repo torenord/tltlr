@@ -1,0 +1,17 @@
+load rtm-tltlr
+
+(tmod EXAMPLE is
+    including NAT-TIME-DOMAIN-WITH-INF .
+
+    sort ExampleState .
+    subsort ExampleState < System .
+
+    ops a b c d : -> ExampleState [ctor] .
+
+    crl [l1] : {a} => {b} in time R:Time if R:Time <= 3 [nonexec] .
+    rl  [l2] :  b  =>  c .
+    crl [l3] : {c} => {d} in time R:Time if R:Time <= 5 [nonexec] .
+    rl  [l4] :  d  =>  a .
+
+    including TLTLR-META-MODEL-CHECKER .
+endtm)
