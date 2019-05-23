@@ -15,6 +15,7 @@ load rtm-tltlr
     crl [l3] : {c(N)} => {d(N + R:Time)} in time R:Time if R:Time <= 12 [nonexec] .
     rl  [l4] :  d(N)  =>  d(N) .
 endtm)
+
 (tmod TEST-CHECK is
     including TEST .
     including TLTLR-MODEL-CHECKER .

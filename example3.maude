@@ -1,9 +1,0 @@
-(set tick max def 1 .)
-
-(mc-tltlr {a(0)} |=p [] [1, 2] state({a(42)}) using tick duration 1 .)
-(mc-tltlr {a(0)} |=c [] [1, 2] state({a(42)}) using tick duration 1 .)
-
-(find gcd of tick durations from {a(0)} .)
-
-(mc-tltlr {a(0)} |=p [] [1, 2] state({a(42)}) using tick duration 4 .)
-(mc-tltlr {a(0)} |=c [] [1, 2] state({a(42)}) using tick duration 4 .)
