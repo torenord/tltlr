@@ -32,6 +32,7 @@ endtm)
     op phi : -> Formula .
     eq phi = [] [1, 2] (state({a(0)}) \/ state({b(1)}) \/ state({c(1)}) \/ state({d(2)})) .
 endtm)
+
 (set tick max def 1 .)
 
 (mc-tltlr {a(0)} |=p [] [1, 2] state({a(42)}) using tick duration 1 .)
