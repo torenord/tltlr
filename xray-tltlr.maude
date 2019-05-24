@@ -1,0 +1,314 @@
+--- Changed May 2019 for use with the TLTLR model checker
+--- https://github.com/torenord/tltlr
+
+--- Original: http://folk.uio.no/leprid/TCTL-RTM/xray.shtml
+
+--- Network of Medical Devices
+
+load rtm-tltlr.maude
+
+(tmod TIME-DOMAIN is
+   protecting NAT-TIME-DOMAIN-WITH-INF .
+endtm)
+
+(tomod TIMED-OO-DLY-MSG is protecting TIME-DOMAIN .
+   sort DlyMsg .
+   subsorts Msg < DlyMsg < NEMsgConfiguration .
+   op dly : Msg Time -> DlyMsg .
+   op dly : Msg Time Time -> DlyMsg .          --- delay in interval
+   op dly : Msg Time Time NzTime -> DlyMsg [ctor] .
+   --- dly(msg, timeToNextCheck, timeToMaxDly, interval)
+
+   op MIN-DELAY : -> Time .      --- minimal message delay.
+   eq MIN-DELAY = 0 .
+   op INTERVAL : -> NzTime .     --- how often to choose between delivery and further delay
+   ---eq INTERVAL = 100 .
+   eq INTERVAL = 25 . --- e.g., if max delay is 50, then INTERVAL = 25 means that when a message is
+   ---sent, then after 25ms a first choice is made on wheather to send the msg or not
+   ---and after 50ms, the message is surely sent.
+   *** a bigger INTERVAL gives a smaller state space
+   *** 409 states with INTERVAL = 100
+   *** 9153 states with INTERVAL = 10
+
+   var M : Msg .
+   var C : Configuration .
+   vars NeC NeC' : NEConfiguration .
+   vars T T' T'' : Time .
+   vars NZT NZT' : NzTime .
+
+   eq dly(M, T) = dly(M, MIN-DELAY, T,  INTERVAL) .
+   eq dly(M, T, T') = dly(M, T, T',  INTERVAL) .
+
+   --- rules for either releasing the message or letting it continue to wait:
+   eq dly(M, T, 0, NZT) = M .      --- reached maximal delay
+   rl [dlyMsgArrives] : dly(M, 0, NZT, NZT') => M .
+   rl [continueDly] : dly(M, 0, NZT, NZT') => dly(M, min(NZT, NZT'), NZT, NZT') .
+
+   --- Tick rule:
+   crl [tick] :  {C} => {delta(C, T)} in time T if T <= mte(C) [nonexec] .
+
+   op delta : Configuration Time -> Configuration [frozen (1)] .
+   op mte : Configuration -> TimeInf [frozen (1)] .
+
+   eq delta(NeC NeC', T) = delta(NeC, T)  delta(NeC', T) .
+   eq mte(NeC NeC') = min(mte(NeC), mte(NeC')) .
+
+   --- On our new kind of delayed messages:
+   eq delta(dly(M, T, T', NZT), T'') = dly(M, T monus T'', T' monus T'', NZT) .
+   eq mte(dly(M, T, T', NZT)) = min(T, T') .
+   eq delta(M, T) = M .
+   eq mte(M) = 0 .
+
+endtom)
+
+--- tick rule, time domain, msg delay, delta, mte
+
+(tomod VENT-SYSTEM is
+  including TIMED-OO-DLY-MSG .
+  protecting RAT .                            --- new, for negative clock drifts
+
+  --- Messages:
+  op pushButton : -> Msg [ctor] .
+  op to`VentMachine`pause`2sec`in`1sec : -> Msg [ctor] .
+  op to`X-ray`takeXray`in`2sec : -> Msg [ctor] .
+  op userWaitUntil_ : Time -> Msg [ctor] .
+
+  vars T T' T'' : Time .
+  var NZT : NzTime .
+  vars C V X : Oid .
+
+  *** *********************************************************************
+  *** Controller:                                                                   
+  ***
+  *** *********************************************************************
+
+    class Controller | clock : Time, lastPauseTime : Time .
+    --- now clock is counting the time from the lastPause...
+
+    --- Read user's push button message (BTW, does it come with delay?)
+
+  rl [readPushButtonMsg] :
+     pushButton
+     < C : Controller | clock : T, lastPauseTime : T' >  
+    =>
+     if (not ((T monus 3000) < (600000 + 10))) then  
+          ---CHANGE if not tooEarly(T, T') then
+          --- take X-ray
+        (< C : Controller | clock : 0,  lastPauseTime : T' >  
+         dly(to VentMachine pause 2sec in 1sec, MIN-DELAY, 50)
+         dly(to X-ray takeXray in 2sec, MIN-DELAY, 50))
+     else --- too early!
+        (< C : Controller | > )
+          ---CHANGE dly(userWaitUntil (T' + 600000 + 10), 0, 50))
+	  dly(userWaitUntil ((600000 + 10) monus (T monus 3000)), 0 , 50)  
+     fi .
+
+
+  op tooEarly : Time Time -> Bool .
+  --- usage: tooEarly(currentTime, last_pause_time)
+  eq tooEarly(T, T') = 
+        if T' == 0 then false    --- no previous pause
+        else (T monus T') < (600000 + 10) fi .
+
+
+  --- Timed behavior. Changed by the drift!
+  eq delta(< C : Controller | clock : T >, T') =
+       < C : Controller | clock : T + (T') > .
+  eq mte(< C : Controller | clock : T >) = INF .
+
+
+  *** *********************************************************************
+  *** Ventilation Machine:                                                          
+  ***
+  *** *********************************************************************
+
+  class VentMachine | state : BreathingState .
+  --- clock attribute should not be needed!
+  --- strictly speaking, neither is vmState, since everything is
+  ---     recorded elsewhere ... but natural for the model
+
+  sort BreathingState .
+  op breathing : -> BreathingState [ctor] .
+  ops breatheUntil stopBreathing : Time -> BreathingState [ctor] .
+
+  --- Read message from Controller:
+  rl [VMreadPause] :
+     (to VentMachine pause 2sec in 1sec)
+     < V : VentMachine | >
+    =>
+     < V : VentMachine | state : breatheUntil(1000) > .
+
+  --- Wait timer expired: 
+  rl [stopBreathing] :
+     < V : VentMachine | state : breatheUntil(0) >
+    =>
+     < V : VentMachine | state : stopBreathing(2000) > .
+
+  --- start to breathe again:
+  rl [restartBreathing] :
+     < V : VentMachine | state : stopBreathing(0) >
+    => 
+     < V : VentMachine | state : breathing > .
+
+  --- IF one desperately wants to reduce the number of rules,
+  --- one could of course define equations
+  ---     breatheUntil(0) = stopBreathing(2000)
+  ---     stopBreathing(0) = breathing, or even 
+  --- replace the above two rules with the same equations!! 
+
+  --- useful operation:
+  op isBreathing : BreathingState -> Bool .
+  eq isBreathing(breathing) = true .
+  eq isBreathing(breatheUntil(T)) = true .
+  eq isBreathing(BS:BreathingState) = false [owise] .
+
+  --- timed behavior; changed by the drift:
+  eq delta(< V : VentMachine | state : breathing >, T) =
+       < V : VentMachine | state : breathing > .
+  eq mte(< V : VentMachine | state : breathing >) = INF .
+
+  eq delta(< V : VentMachine | state : breatheUntil(T) >, T') =
+         < V : VentMachine | state : breatheUntil(T monus T') > .
+  eq mte(< V : VentMachine | state : breatheUntil(T) >) = T / 1 .
+
+  eq delta(< V : VentMachine | state : stopBreathing(T) >, T') =
+          < V : VentMachine | state : stopBreathing(T monus T') > .
+  eq mte(< V : VentMachine | state : stopBreathing(T) >) = T / 1 .
+  
+
+  *** *********************************************************************
+  *** X-ray Machine:                                                                
+  ***
+  *** *********************************************************************
+
+  class X-ray | state : XRstate .
+  --- again, my guess is that a clock attribute is not needed!
+
+  sort XRstate .
+  ops idle takingXray : -> XRstate [ctor] .
+  op wait : Time -> XRstate [ctor] .
+
+  --- Getting message:
+  rl [XrayReadMsg] :
+     (to X-ray takeXray in 2sec)
+     < X : X-ray | >
+    =>
+     < X : X-ray | state : wait(2000) > .
+  --- Notice that this request overrides previous requests 
+
+  --- It is not really necessary, but we make explicit the taking
+  --- of Xrays. Alternatively, wait(0) could denote taking a picture:
+  rl [takeXray] :
+     {< X : X-ray | state : wait(0) > C:Configuration } ---tested for GlobalSystem Terms.
+    =>
+     {< X : X-ray | state : takingXray > C:Configuration }.
+
+  --- Afterwards, the system should immediately idle:
+  rl [idle] :
+     < X : X-ray | state : takingXray >
+    =>
+     < X : X-ray | state : idle > .
+
+  --- Timed behavior; again, modified with drift:
+  eq delta(< X : X-ray | state : idle >, T) = < X : X-ray | state : idle > .
+  eq mte(< X : X-ray | state : idle >) = INF .
+
+  eq delta(< X : X-ray | state : takingXray >, T) = 
+           < X : X-ray | state : takingXray > .
+  eq mte(< X : X-ray | state : takingXray >) = 0 .
+
+  eq delta(< X : X-ray | state : wait(T) >, T') =
+      < X : X-ray | state : wait(T monus (T')) > .
+  eq mte(< X : X-ray | state : wait(T) >) = T / 1 . 
+
+endtom)  
+
+--- We add a user class. A user has two jobs: pushing the buttons
+--- every now and then, and reading answer messages ("push later please")
+--- from the controller.
+--- The first action can be defined by various strategies ...
+
+(tomod USER is including VENT-SYSTEM .
+  
+  class User | pushButtonTimer : TimeInf,    --- timer for next button push
+                     pushInterval : Time .         --- frequency of pushes
+
+  var U : Oid .
+  vars T T' : Time .
+
+  --- Very simplistic model ...:
+  rl [pushButton] :
+     < U : User | pushButtonTimer : 0, pushInterval : T >  
+    =>
+     < U : User | pushButtonTimer : T >
+     dly(pushButton, MIN-DELAY, 50) .
+
+  rl [readUserWait] :
+     (userWaitUntil T)
+     < U : User | pushButtonTimer : T' >  ---modified by adding pushButtonTimer : T'
+    =>
+     < U : User | > .
+
+  --- Time behavior:
+  eq delta(< U : User | pushButtonTimer : T >, T') =
+           < U : User | pushButtonTimer : T monus T' > .
+  eq mte(< U : User | pushButtonTimer : T >) = T .
+endtom)
+
+(tomod INIT-STATE is 
+   including USER .
+
+  ops u vm xr ct : -> Oid [ctor] .
+  
+  op initState : -> GlobalSystem .
+  eq initState =
+      {< u  : User | pushButtonTimer : 0, pushInterval : 60000 > 
+        < ct : Controller | clock : 0, lastPauseTime : 0 >
+---	  < ct : Controller | clock : (600000 + 10), lastPauseTime : 0 > 
+--- modification that makes a pushButton is possible since the beginning
+       < vm : VentMachine | state : breathing >
+       < xr : X-ray | state : idle >} .
+--- now clock is counting the time from the lastPause
+endtom)       
+
+(tomod TEST is
+  including INIT-STATE .
+  including TLTLR-MODEL-CHECKER .
+
+    var CONF : Configuration .
+
+  vars T T' T'' : Time .
+  vars C V X B : Oid .
+  var S : BreathingState .
+
+    *** DEF PROPOSITIONS p, q for each state
+    *** NB I had to define also the false cases. 
+    *** otherwise segmentation fault in metaMC when computing the BRClockInitValue
+    ops isPausing isBreathing : -> Prop [ctor] .
+
+    *** p = isPausing
+    eq {CONF < V : VentMachine | state : stopBreathing(T) >} |= isPausing = true .
+    eq {CONF} |= isPausing = false [owise] .
+    *** q = isBreathing
+    eq {CONF < V : VentMachine | state : breathing >} |= isBreathing = true .
+    eq {CONF < V : VentMachine | state : breatheUntil(T) >} |= isBreathing = true .
+    eq {CONF} |= isBreathing = false [owise] .
+    
+    ops XrayTaken buttonPushed : -> Prop [ctor] .
+    eq {CONF < X : X-ray | state : takingXray >} |= XrayTaken = true .
+    eq {CONF} |= XrayTaken = false [owise] .
+    
+    eq {CONF dly(pushButton, T, T', T'')} |= buttonPushed = true .
+    eq {CONF} |= buttonPushed = false [owise] .
+    eq {CONF pushButton } |= buttonPushed = true .
+    eq {CONF} |= buttonPushed = false [owise] .
+
+endtom)
+
+(set tick max def 1000 .)
+
+(find gcd of tick durations from initState .)
+
+(mc-tltlr initState |=p [] (isPausing -> <> [0, 2000] isBreathing) using tick duration 25 .)
+
+q
